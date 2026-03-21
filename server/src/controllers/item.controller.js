@@ -19,10 +19,17 @@ async function createItem(req, res) {
 
 async function getitems(req, res) {
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 10;
+
+        const total = await ItemModel.countDocuments({ userId: req.user.id });
+
         const items = await ItemModel.find({ userId: req.user.id })
             .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
 
-        res.json({ success: true, items })
+        res.json({ success: true, items,total,page,pages:Math.ceil(total / limit) })
 
 
     } catch (error) {
@@ -65,4 +72,22 @@ async function deleteitem(req, res) {
     }
 }
 
-export default { createItem, getitems, getItemById, deleteitem }
+async function searchItems(req,res){
+    try {
+        const {query} = req.query;
+        const items = await ItemModel.find({
+            userId: req.user.id,
+              $or: [
+        { title: { $regex: query, $options: "i" } },
+        { tags: { $regex: query, $options: "i" } }
+      ]
+        }).sort({createdAt:-1})
+        res.json(items);
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({ success: false, message: "Internal server error" })
+    }
+
+}
+
+export default { createItem, getitems, getItemById, deleteitem,searchItems }
