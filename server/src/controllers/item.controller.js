@@ -1,4 +1,5 @@
 import ItemModel from "../models/items.model.js"
+import itemQueue from "../queues/item.queue.js"
 async function createItem(req, res) {
     try {
         const { title, url, type } = req.body;
@@ -7,8 +8,10 @@ async function createItem(req, res) {
             userid: req.user.id,
             title,
             url,
-            type
+            type,
+            status: "pending"
         })
+        await itemQueue.add("PROCESS_ITEM", { itemId: item._id, url })
         return res.status(201).json({ success: true, item })
 
     } catch (error) {
@@ -22,14 +25,14 @@ async function getitems(req, res) {
         const page = parseInt(req.query.page) || 1;
         const limit = 10;
 
-        const total = await ItemModel.countDocuments({ userId: req.user.id });
+        const total = await ItemModel.countDocuments({ userid: req.user.id });
 
-        const items = await ItemModel.find({ userId: req.user.id })
+        const items = await ItemModel.find({ userid: req.user.id })
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(limit)
 
-        res.json({ success: true, items,total,page,pages:Math.ceil(total / limit) })
+        res.json({ success: true, items, total, page, pages: Math.ceil(total / limit) })
 
 
     } catch (error) {
@@ -42,7 +45,7 @@ async function getItemById(req, res) {
     try {
         const item = await ItemModel.findOne({
             _id: req.params.id,
-            userId: req.user.id
+            userid: req.user.id
         })
         if (!item) {
             return res.status(404).json({ message: "item not found " })
@@ -58,7 +61,7 @@ async function deleteitem(req, res) {
     try {
         const item = await ItemModel.findOneAndDelete({
             _id: req.params.id,
-            userId: req.user.id
+            userid: req.user.id
         })
         if (!item) {
             return res.status(404).json({ message: "item not found" })
@@ -72,16 +75,16 @@ async function deleteitem(req, res) {
     }
 }
 
-async function searchItems(req,res){
+async function searchItems(req, res) {
     try {
-        const {query} = req.query;
+        const { query } = req.query;
         const items = await ItemModel.find({
-            userId: req.user.id,
-              $or: [
-        { title: { $regex: query, $options: "i" } },
-        { tags: { $regex: query, $options: "i" } }
-      ]
-        }).sort({createdAt:-1})
+            userid: req.user.id,
+            $or: [
+                { title: { $regex: query, $options: "i" } },
+                { tags: { $regex: query, $options: "i" } }
+            ]
+        }).sort({ createdAt: -1 })
         res.json(items);
     } catch (error) {
         console.log(error)
@@ -90,4 +93,4 @@ async function searchItems(req,res){
 
 }
 
-export default { createItem, getitems, getItemById, deleteitem,searchItems }
+export default { createItem, getitems, getItemById, deleteitem, searchItems }

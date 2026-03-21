@@ -1,8 +1,7 @@
 import app from "./src/app.js";
-import dotenv from "dotenv";
-dotenv.config();
 import { connectTodb } from "./src/config/db.js";
-connectTodb();  
+import  "./src/workers/itemWorker.js"; // start the worker
+connectTodb();
 
 app.listen(process.env.PORT, () => {
     console.log(`Server is running on port ${process.env.PORT}`)
