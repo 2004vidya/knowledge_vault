@@ -9,6 +9,8 @@ dotenv.config()
     try {
         const { username, email, password } = req.body
 
+        console.log("📝 Register attempt:", { username, email });
+
         const isAlreadyRegistered = await userModel.findOne({
             $or: [
                 { email },
@@ -16,6 +18,7 @@ dotenv.config()
             ]
         })
         if (isAlreadyRegistered) {
+            console.log("⚠️ User already registered:", email);
             return res.status(400).json({
                 success: false,
                 message: "User already registered"
@@ -27,20 +30,33 @@ dotenv.config()
             email,
             password: hash
         })
+        console.log("✅ User created in MongoDB:", user._id);
+        
         const token = jwt.sign({
             id: user._id,
             username: user.username,
         }, process.env.JWT_SECRET, {
             expiresIn: "3d"
         })
-        res.cookie("token", token)
+        res.cookie("token", token, {
+            httpOnly: false,
+            maxAge: 3 * 24 * 60 * 60 * 1000,
+            sameSite: "Lax",
+            secure: false
+        })
+        console.log("✅ Cookie set in register response");
         return res.status(201).json({
             success: true,
             message: "User registered successfully",
-            user
+            user,
+            token: token
         })
     } catch (error) {
-        console.log(error)
+        console.log("❌ Register error:", error.message)
+        return res.status(500).json({
+            success: false,
+            message: "Registration failed: " + error.message
+        })
     }
 
 }
@@ -68,11 +84,18 @@ async function login(req, res) {
         }, process.env.JWT_SECRET, {
             expiresIn: "3d"
         })
-        res.cookie("token", token)
+        res.cookie("token", token, {
+            httpOnly: false,
+            maxAge: 3 * 24 * 60 * 60 * 1000,
+            sameSite: "Lax",
+            secure: false
+        })
+        console.log("✅ Cookie set in login response");
         return res.status(200).json({
             success: true,
             message: "User logged in successfully",
-            user
+            user,
+            token: token
         })
     } catch (error) {
         console.log(error);
