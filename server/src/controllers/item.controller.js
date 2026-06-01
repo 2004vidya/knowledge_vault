@@ -3,18 +3,19 @@ import itemQueue from "../queues/item.queue.js"
 
 async function createItem(req, res) {
     try {
-        const { title, url, type } = req.body;
-        
-        console.log("📝 Creating item for user:", req.user.id);
-        console.log("📝 Item data:", { title, url, type });
+        const { title, url, type, category } = req.body;
 
-        const item = await ItemModel.create({
-            userid: req.user.id,
-            title,
-            url,
-            type,
-            status: "pending"
-        })
+            console.log("📝 Creating item for user:", req.user.id);
+            console.log("📝 Item data:", { title, url, type, category });
+
+            const item = await ItemModel.create({
+                userid: req.user.id,
+                title,
+                url,
+                type,
+                category: category || "Links",
+                status: "pending"
+            })
         console.log("✅ Item created:", item._id, "for user:", item.userid);
         
         await itemQueue.add("PROCESS_ITEM", { itemId: item._id, url })

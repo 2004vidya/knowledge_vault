@@ -26,6 +26,10 @@ const itemSchema = new mongoose.Schema({
         type: [String],
         default: []
     },
+    category: {
+        type: String,
+        default: "Links"
+    },
     metadata: {
         description: String,
         image: String,
