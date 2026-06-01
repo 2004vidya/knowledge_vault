@@ -19,7 +19,7 @@ const itemSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ["article", "video", "tweet", "image", "pdf", "other"],
+        enum: ["article","link", "video", "tweet", "image", "pdf", "other"],
         default: "other"
     },
     tags: {

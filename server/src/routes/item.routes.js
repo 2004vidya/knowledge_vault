@@ -8,6 +8,7 @@ itemRouter.get("/search-items", authUser, itemController.searchItems);
 
 itemRouter.post("/create-item", authUser, createItemValidator, itemController.createItem);
 itemRouter.get("/get-items", authUser, itemController.getitems);
+itemRouter.get("/get-item/:id/related", authUser, itemController.getRelatedItems);
 itemRouter.get("/get-item/:id", authUser, itemController.getItemById);
 itemRouter.delete("/delete-item/:id", authUser, itemController.deleteitem);
 

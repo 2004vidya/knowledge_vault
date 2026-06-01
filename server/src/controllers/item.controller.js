@@ -1,5 +1,7 @@
+import mongoose from "mongoose"
 import ItemModel from "../models/items.model.js"
 import itemQueue from "../queues/item.queue.js"
+import { getRelatedItems as getRelatedItemsService } from "../services/recommendations.service.js"
 
 async function createItem(req, res) {
     try {
@@ -86,6 +88,27 @@ async function deleteitem(req, res) {
     }
 }
 
+async function getRelatedItems(req, res) {
+    try {
+        const id = (req.params.id ?? "").trim();
+        if (!mongoose.isValidObjectId(id)) {
+            return res.status(400).json({ success: false, message: "Invalid item id" })
+        }
+        const item = await ItemModel.findOne({
+            _id: id,
+            userid: req.user.id
+        })
+        if (!item) {
+            return res.status(404).json({ message: "item not found " })
+        }
+        const matches = await getRelatedItemsService(item._id);
+        res.json({ success: true, matches });
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({ success: false, message: "Internal server error" })
+    }
+}
+
 async function searchItems(req, res) {
     try {
         const { query } = req.query;
@@ -104,4 +127,4 @@ async function searchItems(req, res) {
 
 }
 
-export default { createItem, getitems, getItemById, deleteitem, searchItems }
+export default { createItem, getitems, getItemById, deleteitem, searchItems, getRelatedItems }
