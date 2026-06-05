@@ -25,7 +25,7 @@ const Login = () => {
 
   const  handleSubmit = async (e) => {
     e.preventDefault()
-    console.log("login submitted successfully");
+    console.log('Login submitted:', formData)
 
     await loginUser(formData);
     navigate("/");
