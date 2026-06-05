@@ -3,58 +3,105 @@ import { JSDOM } from "jsdom";
 import ogs from "open-graph-scraper";
 import { Readability } from "@mozilla/readability";
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function extractContent(url) {
-    try {
-        // 1. Fetch HTML with proper headers
+  try {
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
         const response = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            },
-            timeout: 10000
-        })
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            Accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            DNT: "1",
+            Connection: "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            Referer: "https://www.google.com/",
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+          timeout: 10000,
+          maxRedirects: 5,
+        });
+
+        if (response.status === 403) {
+          lastError = new Error("HTTP 403: Access Denied");
+          if (attempt < maxRetries) {
+            console.log(
+              `Retry ${attempt}/${maxRetries} for ${url} after 2s delay...`
+            );
+            await sleep(2000 * attempt);
+            continue;
+          }
+        }
+
         const html = response.data;
 
-        // 2. Parse HTML using JSDOM
+        // Parse HTML using JSDOM
         const dom = new JSDOM(html, { url });
 
-        // 3. Extract content using Readability
+        // Extract content using Readability
         const reader = new Readability(dom.window.document);
         const article = reader.parse();
 
-
-        const { result } = await ogs({ url });
-
-        return {
-            title: article?.title || result.ogTitle || "",
-            content: article?.textContent || "",
-            metadata: {
-                description: result.ogDescription || "",
-                image: result.ogImage?.url || "",
-                siteName: result.ogSiteName || ""
-            }
+        // Try to extract OG metadata
+        let ogMetadata = {};
+        try {
+          const { result } = await ogs({ url, timeout: 5000 });
+          ogMetadata = result || {};
+        } catch (ogError) {
+          console.log(`OG metadata extraction failed for ${url}:`, ogError.message);
         }
 
-    } catch (error) {
-        const errorMessage = error.response?.status 
-            ? `HTTP ${error.response.status}: ${error.message}`
-            : error.message;
-        console.error(`Content extraction error for ${url}:`, errorMessage);
-
         return {
-            title: "",
-            content: "",
-            metadata: {}
+          title: article?.title || ogMetadata.ogTitle || "",
+          content: article?.textContent || "",
+          url,
+          metadata: {
+            description: ogMetadata.ogDescription || "",
+            image: ogMetadata.ogImage?.url || "",
+            siteName: ogMetadata.ogSiteName || "",
+          },
         };
-
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          const backoff = 2000 * attempt;
+          console.log(
+            `Attempt ${attempt}/${maxRetries} failed for ${url}, retrying in ${backoff}ms...`
+          );
+          await sleep(backoff);
+        }
+      }
     }
 
+    // If all retries fail, return a minimal fallback
+    console.warn(
+      `Content extraction failed after ${maxRetries} attempts for ${url}:`,
+      lastError?.message
+    );
+    return {
+      title: "",
+      content: "",
+      url,
+      metadata: {},
+    };
+  } catch (error) {
+    console.error(`Unexpected error extracting content from ${url}:`, error.message);
+    return {
+      title: "",
+      content: "",
+      url,
+      metadata: {},
+    };
+  }
 }
 
 export default extractContent;

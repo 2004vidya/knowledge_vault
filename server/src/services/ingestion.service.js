@@ -17,14 +17,28 @@ const chunkText = async(text)=>{
 }
 
 
-export const ingestContent = async({ title, url, content, tags })=>{
-    try {
+export const ingestContent = async({ title, url, content, tags, itemId }) => {
+  try {
+    if (!content || content.trim().length === 0) {
+      console.warn("Ingestion warning: content is empty for itemId:", itemId);
+      return { message: "Content ingested successfully", chunks: 0 };
+    }
 
-        const chunks = await chunkText(content);
+    const chunks = await chunkText(content);
+    console.log(`Chunked content into ${chunks.length} chunks for itemId:`, itemId);
 
-        const vectors =[];
-         for (const chunk of chunks) {
+    if (!chunks || chunks.length === 0) {
+      console.warn("Ingestion warning: no chunks generated for itemId:", itemId);
+      return { message: "Content ingested successfully", chunks: 0 };
+    }
+
+    const vectors = [];
+    for (const chunk of chunks) {
       const embedding = await generateEmbeddings(chunk);
+      if (!embedding || embedding.length === 0) {
+        console.warn("Embedding generation failed for chunk in itemId:", itemId);
+        continue;
+      }
 
       vectors.push({
         id: uuidv4(),
@@ -34,16 +48,22 @@ export const ingestContent = async({ title, url, content, tags })=>{
           url,
           content: chunk,
           tags,
+          itemId: String(itemId),
         },
       });
     }
 
-     await upsertVectors(vectors);
-
-    return { message: "Content ingested successfully", chunks: chunks.length };
-        
-    } catch (error) {
-        console.error("Ingestion error:", error.message);
-        return { error: error.message };
+    if (vectors.length === 0) {
+      console.warn("Ingestion warning: no valid vectors generated for itemId:", itemId);
+      return { message: "Content ingested successfully, but no embeddings were created", chunks: chunks.length };
     }
-}
+
+    await upsertVectors(vectors);
+    console.log(`Upserted ${vectors.length} vectors for itemId:`, itemId);
+
+    return { message: "Content ingested successfully", chunks: chunks.length, vectors: vectors.length };
+  } catch (error) {
+    console.error("Ingestion error:", error.message);
+    return { error: error.message };
+  }
+};

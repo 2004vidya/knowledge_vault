@@ -4,6 +4,7 @@ import ItemModel from "../models/items.model.js";
 import extractContent from "../services/contentExtractor.js";
 import { generateTags } from "../services/ai.service.js";
 import { ingestContent } from "../services/ingestion.service.js";
+import { assignClusterForItem } from "../services/cluster.service.js";
 
 const itemWorker = new Worker("itemQueue", async (job) => {
     console.log("Processing job:", job.name, job.data);
@@ -20,6 +21,7 @@ const itemWorker = new Worker("itemQueue", async (job) => {
         
 
         const result = await ingestContent({
+            itemId,
             title: extractedData.title,
             url: extractedData.url,
             content: extractedData.content,
@@ -37,6 +39,8 @@ const itemWorker = new Worker("itemQueue", async (job) => {
                 
             }
         );
+
+        await assignClusterForItem(itemId, `${extractedData.title}\n${extractedData.content}`);
         console.log(`Item ${itemId} marked as processed`);
 
 

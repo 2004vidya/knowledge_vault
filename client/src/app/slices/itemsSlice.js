@@ -15,7 +15,7 @@ const itemsSlice = createSlice({
       state.list.push(action.payload)
     },
     removeItem: (state, action) => {
-      state.list = state.list.filter(item => item.id !== action.payload)
+      state.list = state.list.filter(item => item._id !== action.payload && item.id !== action.payload)
     }
   }
 })

@@ -40,6 +40,11 @@ const itemSchema = new mongoose.Schema({
         type: String,
         enum: ["pending", "processed"],
         default: "pending"
+    },
+    clusterId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Cluster",
+    default: null
     }
 
 }, { timestamps: true })

@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import useItem from "../hooks/useItem.js";
 import { setActiveFilter, setView, setSelectedItem, setSurfaced, setSearchQuery } from '../../../app/slices/uiSlice';
-import { setItems } from '../../../app/slices/itemsSlice';
+import { setItems, removeItem } from '../../../app/slices/itemsSlice';
 import { logout } from '../../../features/auth/service/auth.api.js';
 
 
@@ -61,7 +61,7 @@ export default function Dashboard() {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { fetchItems, searchForItems, createNewItem } = useItem();
+  const { fetchItems, searchForItems, createNewItem, removeItem: deleteItemFromAPI } = useItem();
   
   const items = useSelector(state => state.items.list);
   const activeFilter = useSelector(state => state.ui.activeFilter);
@@ -85,6 +85,39 @@ export default function Dashboard() {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  // Handle delete item
+  const handleDeleteItem = async () => {
+    if (!selectedItem) return;
+    if (!window.confirm('Are you sure you want to delete this item?')) return;
+    
+    try {
+      const itemId = selectedItem._id || selectedItem.id;
+      await deleteItemFromAPI(itemId);
+      dispatch(removeItem(itemId));
+      dispatch(setSelectedItem(null));
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete item');
+    }
+  };
+
+  // Handle delete item from card directly
+  const handleDeleteItemFromCard = async (item) => {
+    if (!window.confirm('Are you sure you want to delete this item?')) return;
+    
+    try {
+      const itemId = item._id || item.id;
+      await deleteItemFromAPI(itemId);
+      dispatch(removeItem(itemId));
+      if (selectedItem && (selectedItem._id === itemId || selectedItem.id === itemId)) {
+        dispatch(setSelectedItem(null));
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete item');
+    }
   };
 
   // Pick a random resurfaced item on load
@@ -126,9 +159,34 @@ export default function Dashboard() {
     const matchSearch =
       !searchQuery ||
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      (item.tags || []).some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchType && matchSearch;
   });
+
+  const clusters = Object.values(
+    items.reduce((acc, item) => {
+      const clusterId = item.clusterId ? String(item.clusterId) : null;
+      if (!clusterId) return acc;
+
+      if (!acc[clusterId]) {
+        acc[clusterId] = {
+          id: clusterId,
+          items: [],
+          tags: new Set(),
+        };
+      }
+
+      acc[clusterId].items.push(item);
+      (item.tags || []).forEach(tag => acc[clusterId].tags.add(tag));
+      return acc;
+    }, {})
+  ).map(cluster => ({
+    ...cluster,
+    tags: Array.from(cluster.tags).slice(0, 5),
+    title: cluster.tags.size > 0 ? Array.from(cluster.tags).slice(0, 3).join(" • ") : `Topic ${cluster.id.slice(0, 6)}`,
+  }));
+
+  clusters.sort((a, b) => b.items.length - a.items.length);
 
   // Knowledge graph canvas animation
   useEffect(() => {
@@ -279,10 +337,10 @@ export default function Dashboard() {
         ::-webkit-scrollbar-thumb { background: #2a2a3f; border-radius: 2px; }
         body { background: #080810; }
         .card { transition: transform 0.22s ease, box-shadow 0.22s ease; }
-        .card:hover { transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.5); }
-        .tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.55); }
+        .tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 20px; background: #141b2f; color: #8cc8ff; border: 1px solid #1f2b46; }
         .filter-btn { font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; transition: all 0.15s; border: none; }
-        .filter-btn:hover { opacity: 0.85; }
+        .filter-btn:hover { opacity: 0.95; }
         .glow-btn { transition: all 0.2s; }
         .glow-btn:hover { box-shadow: 0 0 24px currentColor; }
         input { outline: none; }
@@ -293,7 +351,7 @@ export default function Dashboard() {
         .fade-up { animation: fadeUp 0.4s ease forwards; }
         .surfaced-card { animation: fadeUp 0.6s ease forwards; }
         .saving-shimmer { background: linear-gradient(90deg, #1a1a2e 25%, #2a2a4e 50%, #1a1a2e 75%); background-size: 400px; animation: shimmer 1.2s infinite; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: center; justify-content: center; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); z-index: 100; display: flex; align-items: center; justify-content: center; }
       `}</style>
 
       {/* Ambient background blobs */}
@@ -316,12 +374,12 @@ export default function Dashboard() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {/* Search */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#12121e", border: "1px solid #1e1e30", borderRadius: 10, padding: "8px 14px", width: 240 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141e30", border: "1px solid #202d47", borderRadius: 10, padding: "8px 14px", width: 240 }}>
               <span style={{ fontSize: 14, opacity: 0.4 }}>⌕</span>
               <input value={searchQuery} onChange={e => dispatch(setSearchQuery(e.target.value))} placeholder="Search your mind..." style={{ background: "none", border: "none", color: "#e8e8f0", fontSize: 13, fontFamily: "'Syne'", width: "100%" }} />
             </div>
             {/* View toggle */}
-            <div style={{ display: "flex", background: "#12121e", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ display: "flex", background: "#141e30", border: "1px solid #202d47", borderRadius: 10, overflow: "hidden" }}>
               {[["grid", "⊞"], ["graph", "◎"]].map(([v, icon]) => (
                 <button key={v} onClick={() => dispatch(setView(v))} className="filter-btn" style={{ padding: "8px 16px", background: view === v ? "#1e1e30" : "none", color: view === v ? "#6EE7B7" : "#555570", fontSize: 16 }}>{icon}</button>
               ))}
@@ -339,15 +397,15 @@ export default function Dashboard() {
 
         <div style={{ display: "flex", minHeight: "calc(100vh - 65px)" }}>
           {/* Sidebar */}
-          <aside style={{ width: 220, borderRight: "1px solid #1e1e30", padding: "28px 20px", display: "flex", flexDirection: "column", gap: 6, background: "#09090f", flexShrink: 0 }}>
-            <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350", letterSpacing: "0.12em", marginBottom: 10 }}>COLLECTIONS</div>
+          <aside style={{ width: 220, borderRight: "1px solid #1f2942", padding: "28px 20px", display: "flex", flexDirection: "column", gap: 6, background: "#0d1628", flexShrink: 0 }}>
+            <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#7b8db0", letterSpacing: "0.12em", marginBottom: 10 }}>COLLECTIONS</div>
             {[
               { label: "All Saves", icon: "◈", count: 6 },
               { label: "AI & Tech", icon: "◆", count: 3 },
               { label: "Learning", icon: "◇", count: 2 },
               { label: "Research", icon: "○", count: 1 },
             ].map(({ label, icon, count }) => (
-              <button key={label} className="filter-btn" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, background: label === "All Saves" ? "#1a1a28" : "none", color: label === "All Saves" ? "#e8e8f0" : "#555570", width: "100%", textAlign: "left", fontSize: 13, fontFamily: "'Syne'" }}>
+              <button key={label} className="filter-btn" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 8, background: label === "All Saves" ? "#1f2a42" : "none", color: label === "All Saves" ? "#e8e8f0" : "#9eaad2", width: "100%", textAlign: "left", fontSize: 13, fontFamily: "'Syne'" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span>{icon}</span>{label}</span>
                 <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>{count}</span>
               </button>
@@ -360,7 +418,7 @@ export default function Dashboard() {
               </button>
             ))}
 
-            <div style={{ marginTop: "auto", padding: "16px 12px", background: "#0f0f1e", border: "1px solid #1e1e30", borderRadius: 10 }}>
+            <div style={{ marginTop: "auto", padding: "16px 12px", background: "#121d33", border: "1px solid #202d47", borderRadius: 10 }}>
               <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono'", color: "#555570", marginBottom: 6 }}>Storage</div>
               <div style={{ height: 4, background: "#1a1a28", borderRadius: 2 }}>
                 <div style={{ height: "100%", width: "38%", background: "linear-gradient(90deg, #6EE7B7, #93C5FD)", borderRadius: 2 }} />
@@ -378,7 +436,7 @@ export default function Dashboard() {
               const surfacedTime = surfaced.time || new Date(surfaced.createdAt || Date.now()).toLocaleDateString();
 
               return (
-              <div className="surfaced-card" style={{ background: "linear-gradient(135deg, #12121e, #1a1a2e)", border: "1px solid #2a2a3f", borderRadius: 14, padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 16, cursor: "pointer" }} onClick={() => dispatch(setSelectedItem(surfaced))}>
+              <div className="surfaced-card" style={{ background: "linear-gradient(135deg, #121b2d, #182138)", border: "1px solid #293549", borderRadius: 14, padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 16, cursor: "pointer" }} onClick={() => dispatch(setSelectedItem(surfaced))}>
                 <div style={{ width: 40, height: 40, borderRadius: 10, background: surfacedColor + "20", border: "1px solid " + surfacedColor + "40", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{surfacedIcon}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#6EE7B7", letterSpacing: "0.1em", marginBottom: 4 }}>🔁 MEMORY RESURFACING · {surfacedTime.toUpperCase()}</div>
@@ -399,8 +457,43 @@ export default function Dashboard() {
               <div style={{ marginLeft: "auto", fontSize: 11, fontFamily: "'JetBrains Mono'", color: "#333350", display: "flex", alignItems: "center" }}>{filtered.length} items</div>
             </div>
 
+            {clusters.length > 0 && (
+              <section style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#e8e8f0" }}>Topic Clusters</div>
+                    <div style={{ fontSize: 11, color: "#555570", fontFamily: "'JetBrains Mono'" }}>{clusters.length} clusters found</div>
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{items.filter(i => i.clusterId).length} clustered items</div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+                  {clusters.map((cluster, idx) => (
+                    <div key={cluster.id} className="card fade-up" style={{ background: "#121b2f", border: "1px solid #202d47", borderRadius: 16, padding: 18, cursor: "default", animationDelay: `${idx * 40}ms`, minHeight: 160 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#e8e8f0" }}>{cluster.title}</div>
+                          <div style={{ fontSize: 10, color: "#9fb2d7", fontFamily: "'JetBrains Mono'", marginTop: 4 }}><strong>{cluster.items.length}</strong> saves</div>
+                        </div>
+                        <div style={{ width: 34, height: 34, borderRadius: 12, background: "linear-gradient(135deg, #6EE7B7, #93C5FD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: "#050b14" }}>★</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#d3dcff", lineHeight: 1.6, marginBottom: 14 }}>
+                        {cluster.items.slice(0, 3).map(item => item.title).join(" · ")}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {cluster.tags.length > 0 ? cluster.tags.map(tag => (
+                          <span key={tag} className="tag" style={{ background: "#141f34", color: "#8cd6ff", border: "1px solid #1f2f51" }}>#{tag}</span>
+                        )) : (
+                          <span className="tag" style={{ background: "#141f34", color: "#9ea6c0", border: "1px solid #1f2f51" }}>uncategorized</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {loading && (
-  <div style={{ textAlign: "center", padding: "40px", color: "#555570" }}>
+  <div style={{ textAlign: "center", padding: "40px", color: "#8fa3cb" }}>
     <div style={{ fontSize: 14 }}>Loading your items...</div>
   </div>
 )}
@@ -415,10 +508,10 @@ export default function Dashboard() {
 
             {/* Graph view */}
             {view === "graph" && (
-              <div className="fade-up" style={{ background: "#0c0c18", border: "1px solid #1e1e30", borderRadius: 16, overflow: "hidden", marginBottom: 24 }}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e30", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div className="fade-up" style={{ background: "#121b2f", border: "1px solid #202d47", borderRadius: 16, overflow: "hidden", marginBottom: 24 }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid #202d47", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#e8e8f0" }}>Knowledge Graph</span>
-                  <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>6 nodes · 8 connections</span>
+                  <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>6 nodes · 8 connections</span>
                 </div>
                 <canvas ref={canvasRef} style={{ width: "100%", height: 420, display: "block" }} />
               </div>
@@ -435,18 +528,21 @@ export default function Dashboard() {
                   const itemTime = item.time || new Date(item.createdAt || Date.now()).toLocaleDateString();
                   
                   return (
-                  <div key={item._id || item.id} className="card fade-up" onClick={() => dispatch(setSelectedItem(item))} style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 14, padding: "18px", cursor: "pointer", animationDelay: `${idx * 60}ms`, position: "relative", overflow: "hidden" }}>
+                  <div key={item._id || item.id} className="card fade-up" onClick={() => dispatch(setSelectedItem(item))} style={{ background: "#121827", border: "1px solid #202d47", borderRadius: 14, padding: "18px", cursor: "pointer", animationDelay: `${idx * 60}ms`, position: "relative", overflow: "hidden" }}>
                     {/* Color accent top */}
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${itemColor}, transparent)` }} />
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                       <div style={{ width: 36, height: 36, borderRadius: 9, background: itemColor + "18", border: "1px solid " + itemColor + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{itemIcon}</div>
-                      <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>{itemTime}</span>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteItemFromCard(item); }} style={{ background: "none", border: "none", color: "#FF6B6B", cursor: "pointer", fontSize: 14, opacity: 0.6, transition: "opacity 0.2s" }} onMouseEnter={e => e.target.style.opacity = "1"} onMouseLeave={e => e.target.style.opacity = "0.6"} title="Delete item">🗑️</button>
+                        <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{itemTime}</span>
+                      </div>
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#e8e8f0", marginBottom: 8, lineHeight: 1.4 }}>{item.title}</div>
-                    <div style={{ fontSize: 11, color: "#444460", fontFamily: "'JetBrains Mono'", marginBottom: 12, lineHeight: 1.5 }}>{itemPreview.slice(0, 90)}…</div>
+                    <div style={{ fontSize: 11, color: "#b8c4df", fontFamily: "'JetBrains Mono'", marginBottom: 12, lineHeight: 1.5 }}>{itemPreview.slice(0, 90)}…</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {(item.tags || []).map(tag => (
-                        <span key={tag} className="tag" style={{ background: "#1a1a2a", color: "#555570", border: "1px solid #1e1e30" }}>#{tag}</span>
+                        <span key={tag} className="tag" style={{ background: "#141f34", color: "#8cd6ff", border: "1px solid #1f2f51" }}>#{tag}</span>
                       ))}
                     </div>
                     <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1e1e30", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -471,20 +567,23 @@ export default function Dashboard() {
             const itemTime = selectedItem.time || new Date(selectedItem.createdAt || Date.now()).toLocaleDateString();
 
             return (
-            <aside style={{ width: 340, borderLeft: "1px solid #1e1e30", background: "#09090f", overflowY: "auto", animation: "fadeUp 0.25s ease" }}>
-              <div style={{ padding: "18px 20px", borderBottom: "1px solid #1e1e30", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono'", color: "#555570", textTransform: "uppercase" }}>Detail</span>
-                <button onClick={() => dispatch(setSelectedItem(null))} style={{ background: "none", border: "none", color: "#555570", cursor: "pointer", fontSize: 18 }}>✕</button>
+            <aside style={{ width: 340, borderLeft: "1px solid #202d47", background: "#0e1729", overflowY: "auto", animation: "fadeUp 0.25s ease" }}>
+              <div style={{ padding: "18px 20px", borderBottom: "1px solid #202d47", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono'", color: "#8fa3cb", textTransform: "uppercase" }}>Detail</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={handleDeleteItem} style={{ background: "none", border: "none", color: "#FF6B6B", cursor: "pointer", fontSize: 18, padding: "4px 8px", borderRadius: 6, transition: "all 0.2s", hover: { background: "#FF6B6B15" } }} onMouseEnter={e => e.target.style.background = "#FF6B6B15"} onMouseLeave={e => e.target.style.background = "none"} title="Delete item">🗑️</button>
+                  <button onClick={() => dispatch(setSelectedItem(null))} style={{ background: "none", border: "none", color: "#8fa3cb", cursor: "pointer", fontSize: 18 }}>✕</button>
+                </div>
               </div>
               <div style={{ padding: 20 }}>
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: itemColor + "18", border: "1px solid " + itemColor + "40", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, marginBottom: 14 }}>{itemIcon}</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: "#e8e8f0", lineHeight: 1.4, marginBottom: 8 }}>{selectedItem.title}</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
-                  <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>{itemSource}</span>
-                  <span style={{ width: 3, height: 3, borderRadius: "50%", background: "#333350" }} />
-                  <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>{itemTime}</span>
+                  <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{itemSource}</span>
+                  <span style={{ width: 3, height: 3, borderRadius: "50%", background: "#8fa3cb" }} />
+                  <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{itemTime}</span>
                 </div>
-                <div style={{ fontSize: 13, color: "#666680", lineHeight: 1.7, marginBottom: 20 }}>{itemPreview}</div>
+                <div style={{ fontSize: 13, color: "#b8c4df", lineHeight: 1.7, marginBottom: 20 }}>{itemPreview}</div>
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350", marginBottom: 10, letterSpacing: "0.1em" }}>TAGS</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
