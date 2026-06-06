@@ -33,7 +33,7 @@ const Register = () => {
       
       console.log('Registration successful:', response)
       // Navigate to dashboard after successful registration
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       console.error('Registration error:', err)
       setError(err.response?.data?.message || 'Registration failed. Please try again.')

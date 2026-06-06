@@ -28,7 +28,7 @@ const Login = () => {
     console.log('Login submitted:', formData)
 
     await loginUser(formData);
-    navigate("/");
+    navigate("/dashboard");
 
   }
 
