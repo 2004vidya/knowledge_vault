@@ -11,8 +11,16 @@ export default defineConfig({
     minify: 'terser',
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor': ['react', 'react-dom', 'react-router-dom', '@reduxjs/toolkit', 'react-redux', 'axios']
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react')) {
+              return 'react-vendor';
+            }
+            if (id.includes('redux') || id.includes('react-redux')) {
+              return 'redux-vendor';
+            }
+            return 'vendor';
+          }
         }
       }
     }
