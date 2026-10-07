@@ -41,22 +41,23 @@ const itemWorker = new Worker("itemQueue", async (job) => {
         }
 
         await ItemModel.findByIdAndUpdate(itemId, updateData);
-        console.log(`✅ Item ${itemId} saved to DB with title: "${extractedData.title}"`);
+        const finalTitle = updateData.title || extractedData.title || url;
+        console.log(`✅ Item ${itemId} saved to DB with title: "${finalTitle}"`);
 
-        // Only ingest to Pinecone and cluster if we have meaningful content
-        if (extractedData.content && extractedData.content.trim().length > 20) {
+        // Always ingest to Pinecone using title, tags, and extracted content
+        try {
             await ingestContent({
                 itemId,
-                title: extractedData.title,
-                url: extractedData.url,
-                content: extractedData.content,
-                tags,
+                title: finalTitle,
+                url: extractedData.url || url,
+                content: extractedData.content || "",
+                tags: updateData.tags,
             });
 
-            await assignClusterForItem(itemId, `${extractedData.title}\n${extractedData.content}`);
+            await assignClusterForItem(itemId, `${finalTitle}\n${extractedData.content || ""}`);
             console.log(`🧠 Item ${itemId} ingested to Pinecone and clustered`);
-        } else {
-            console.warn(`⚠️ Skipping Pinecone ingestion for ${itemId} — content too short or empty`);
+        } catch (ingestError) {
+            console.error(`⚠️ Pinecone ingestion failed for ${itemId}:`, ingestError.message);
         }
 
         console.log(`Item ${itemId} marked as processed`);

@@ -152,20 +152,40 @@ async function searchItems(req, res) {
                     
                     semanticItemIds = Array.from(new Set(rawIds));
                     console.log(`🧠 Pinecone semantic matches found: ${semanticItemIds.length}`);
+                } else {
+                    console.log("ℹ️ Pinecone returned 0 matches for query vector embedding.");
                 }
+            } else {
+                console.warn("⚠️ Could not generate query embedding (check MISTRAL_API_KEY)");
             }
         } catch (semanticErr) {
             console.warn("⚠️ Vector semantic search error, falling back to regex search:", semanticErr.message);
         }
 
-        // 2. Keyword Regex Search (MongoDB fallback / supplement)
+        // 2. Keyword & Tokenized Regex Search (MongoDB fallback / supplement)
+        const tokens = trimmedQuery.split(/\s+/).filter(t => t.length > 1);
+        if (trimmedQuery.toLowerCase().includes("artificial") || trimmedQuery.toLowerCase().includes("intelligence")) {
+            tokens.push("AI");
+        }
+        if (trimmedQuery.toLowerCase().includes("classes") || trimmedQuery.toLowerCase().includes("class") || trimmedQuery.toLowerCase().includes("oops") || trimmedQuery.toLowerCase().includes("oop")) {
+            tokens.push("C++", "Object", "Oriented", "Programming");
+        }
+
+        const orConditions = [
+            { title: { $regex: trimmedQuery, $options: "i" } },
+            { tags: { $regex: trimmedQuery, $options: "i" } },
+            { content: { $regex: trimmedQuery, $options: "i" } }
+        ];
+
+        tokens.forEach(token => {
+            orConditions.push({ title: { $regex: token, $options: "i" } });
+            orConditions.push({ tags: { $regex: token, $options: "i" } });
+            orConditions.push({ content: { $regex: token, $options: "i" } });
+        });
+
         const regexItems = await ItemModel.find({
             userid: req.user.id,
-            $or: [
-                { title: { $regex: trimmedQuery, $options: "i" } },
-                { tags: { $regex: trimmedQuery, $options: "i" } },
-                { content: { $regex: trimmedQuery, $options: "i" } }
-            ]
+            $or: orConditions
         }).sort({ createdAt: -1 });
 
         // 3. Fetch user's items corresponding to Pinecone semantic IDs
