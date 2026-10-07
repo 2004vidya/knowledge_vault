@@ -7,24 +7,41 @@ async function createItem(req, res) {
     try {
         const { title, url, type, category } = req.body;
 
-            console.log("📝 Creating item for user:", req.user.id);
-            console.log("📝 Item data:", { title, url, type, category });
+        if (!title || typeof title !== "string" || !title.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Title is required"
+            });
+        }
 
-            const item = await ItemModel.create({
-                userid: req.user.id,
-                title,
-                url,
-                type,
-                category: category || "Links",
-                status: "pending"
-            })
+        console.log("📝 Creating item for user:", req.user.id);
+        console.log("📝 Item data:", { title, url, type, category });
+
+        const item = await ItemModel.create({
+            userid: req.user.id,
+            title: title.trim(),
+            url,
+            type,
+            category: category || "Links",
+            status: "pending"
+        })
         console.log("✅ Item created:", item._id, "for user:", item.userid);
         
-        await itemQueue.add("PROCESS_ITEM", { itemId: item._id, url })
+        try {
+            await itemQueue.add("PROCESS_ITEM", { itemId: item._id, url })
+            console.log("📨 Item added to processing queue:", item._id);
+        } catch (queueError) {
+            console.warn("⚠️ Could not add item to queue (Redis may be unavailable):", queueError.message);
+            // Item is saved to DB; AI processing will be skipped until Redis is restored
+        }
+        
         return res.status(201).json({ success: true, item })
 
     } catch (error) {
         console.log("❌ Create item error:", error)
+        if (error.name === "ValidationError") {
+            return res.status(400).json({ success: false, message: error.message })
+        }
         return res.status(500).json({ success: false, message: "Internal server error" })
     }
 }

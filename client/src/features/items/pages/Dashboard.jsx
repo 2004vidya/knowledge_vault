@@ -3,8 +3,10 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import useItem from "../hooks/useItem.js";
 import { setActiveFilter, setView, setSelectedItem, setSurfaced, setSearchQuery } from '../../../app/slices/uiSlice';
-import { setItems, removeItem } from '../../../app/slices/itemsSlice';
+import { setItems, removeItem,updateItem } from '../../../app/slices/itemsSlice';
 import { logout } from '../../../features/auth/service/auth.api.js';
+
+import { getItemById } from "../service/item.api.js";
 
 
 
@@ -80,6 +82,8 @@ export default function Dashboard() {
   const [saved, setSaved] = useState(false);
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
+  const pollIntervalsRef = useRef([]);
+
 
   // Handle logout
   const handleLogout = () => {
@@ -187,6 +191,13 @@ export default function Dashboard() {
   }));
 
   clusters.sort((a, b) => b.items.length - a.items.length);
+
+  useEffect(() => {
+  return () => {
+    pollIntervalsRef.current.forEach(clearInterval);
+  };
+}, []);
+
 
   // Knowledge graph canvas animation
   useEffect(() => {
@@ -301,17 +312,44 @@ export default function Dashboard() {
     return () => clearTimeout(debounce);
   }, [searchQuery, searchForItems, dispatch]);
 
+  // Auto-detect item type from URL
+  function detectTypeFromUrl(url) {
+    try {
+      const u = url.toLowerCase();
+      if (u.includes("youtube.com") || u.includes("youtu.be") || u.includes("vimeo.com") || u.includes("twitch.tv")) {
+        return "video";
+      }
+      if (u.includes("twitter.com") || u.includes("x.com")) {
+        return "tweet";
+      }
+      if (u.endsWith(".pdf") || u.includes("/pdf/") || u.includes("arxiv.org/pdf")) {
+        return "pdf";
+      }
+      if (u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") || u.endsWith(".gif") || u.endsWith(".webp")) {
+        return "image";
+      }
+      return "article";
+    } catch {
+      return "article";
+    }
+  }
+
   async function handleSave() {
     if (!urlInput) return;
     setSaving(true);
     try {
-      // Create the item on the server
+      const detectedType = detectTypeFromUrl(urlInput);
+      // Use a readable title: extract hostname or fallback to URL
+      let title = urlInput;
+      try { title = new URL(urlInput).hostname.replace(/^www\./, "") + " — " + new URL(urlInput).pathname.split("/").filter(Boolean).slice(-1)[0]; } catch {}
+      
       const payload = {
-        title: urlInput,
+        title: title || urlInput,
         url: urlInput,
-        type: "article",
+        type: detectedType,
         category: categoryInput
       };
+      console.log("📤 Saving item with type:", detectedType, "category:", categoryInput);
       const res = await createNewItem(payload);
       const newItem = res?.item;
       if (newItem) {
@@ -319,13 +357,44 @@ export default function Dashboard() {
         dispatch(setItems([newItem, ...items]));
         setSaved(true);
       }
+      if (newItem.status === "pending") {
+        pollItemUntilProcessed(newItem._id || newItem.id);
+      }
+
+
     } catch (err) {
       console.error('Create item failed:', err);
     } finally {
       setSaving(false);
-      setTimeout(() => { setSaved(false); setUrlInput(""); setAddOpen(false); }, 1200);
+      setTimeout(() => { setSaved(false); setUrlInput(""); setCategoryInput("Links"); setAddOpen(false); }, 1200);
     }
   }
+
+  // Poll a single item until it's processed, then update the store
+function pollItemUntilProcessed(itemId) {
+  const MAX_POLLS = 20;      // stop after ~60 seconds
+  const INTERVAL_MS = 3000; // check every 3 seconds
+  let polls = 0;
+
+  const intervalId = setInterval(async () => {
+    polls++;
+    try {
+      const freshItem = await getItemById(itemId);
+      if (freshItem?.status === "processed") {
+        dispatch(updateItem(freshItem));  // update card in place
+        clearInterval(intervalId);
+        console.log("✅ Item updated in UI:", freshItem.title);
+      }
+    } catch (err) {
+      console.warn("Polling error:", err);
+    }
+    if (polls >= MAX_POLLS) {
+      clearInterval(intervalId); // give up after max polls
+    }
+  }, INTERVAL_MS);
+  pollIntervalsRef.current.push(intervalId);
+}
+
 
   return (
     <div style={{ fontFamily: "'Syne', sans-serif", background: "#080810", minHeight: "100vh", color: "#e8e8f0" }}>
@@ -521,11 +590,16 @@ export default function Dashboard() {
             {view === "grid" && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
                 {filtered.map((item, idx) => {
-                  const itemColor = item.color || "#6EE7B7";
+                  const itemColor = item.color || (item.type === "video" ? "#FCA5A5" : item.type === "tweet" ? "#93C5FD" : item.type === "pdf" ? "#FCD34D" : item.type === "image" ? "#C4B5FD" : "#6EE7B7");
                   const itemIcon = item.icon || typeIcon[item.type] || "📄";
                   const itemPreview = item.preview || item.metadata?.description || item.content || "";
-                  const itemSource = item.source || item.metadata?.siteName || "Web";
+                  const itemSource = item.source || item.metadata?.siteName || (item.url ? (() => { try { return new URL(item.url).hostname.replace(/^www\./, ""); } catch { return "Web"; } })() : "Web");
                   const itemTime = item.time || new Date(item.createdAt || Date.now()).toLocaleDateString();
+                  // Show a clean title — if title looks like a raw URL, extract hostname
+                  const isRawUrl = item.title && (item.title.startsWith("http://") || item.title.startsWith("https://"));
+                  const displayTitle = isRawUrl
+                    ? (() => { try { const u = new URL(item.title); return u.hostname.replace(/^www\./,"") + (u.pathname !== "/" ? u.pathname : ""); } catch { return item.title; } })()
+                    : (item.title || "Untitled");
                   
                   return (
                   <div key={item._id || item.id} className="card fade-up" onClick={() => dispatch(setSelectedItem(item))} style={{ background: "#121827", border: "1px solid #202d47", borderRadius: 14, padding: "18px", cursor: "pointer", animationDelay: `${idx * 60}ms`, position: "relative", overflow: "hidden" }}>
@@ -538,8 +612,8 @@ export default function Dashboard() {
                         <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{itemTime}</span>
                       </div>
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#e8e8f0", marginBottom: 8, lineHeight: 1.4 }}>{item.title}</div>
-                    <div style={{ fontSize: 11, color: "#b8c4df", fontFamily: "'JetBrains Mono'", marginBottom: 12, lineHeight: 1.5 }}>{itemPreview.slice(0, 90)}…</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#e8e8f0", marginBottom: 8, lineHeight: 1.4 }}>{displayTitle}</div>
+                    <div style={{ fontSize: 11, color: "#b8c4df", fontFamily: "'JetBrains Mono'", marginBottom: 12, lineHeight: 1.5 }}>{itemPreview ? itemPreview.slice(0, 90) + "…" : <span style={{color:"#333350",fontStyle:"italic"}}>Processing…</span>}</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {(item.tags || []).map(tag => (
                         <span key={tag} className="tag" style={{ background: "#141f34", color: "#8cd6ff", border: "1px solid #1f2f51" }}>#{tag}</span>
@@ -636,16 +710,16 @@ export default function Dashboard() {
               <div>
                 <input value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="https://..." style={{ width: "100%", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 10, padding: "13px 16px", color: "#e8e8f0", fontFamily: "'JetBrains Mono'", fontSize: 13, marginBottom: 12 }} />
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <select value={categoryInput} onChange={e => setCategoryInput(e.target.value)} style={{ flex: 1, background: '#0a0a14', border: '1px solid #1e1e30', borderRadius: 8, padding: '10px 12px', color: '#e8e8f0' }}>
+                  <select value={categoryInput} onChange={e => setCategoryInput(e.target.value)} style={{ flex: 1, background: '#0a0a14', border: '1px solid #1e1e30', borderRadius: 8, padding: '10px 12px', color: '#e8e8f0' , marginBottom:'1.5rem'}}>
                     <option value="Links">Links</option>
                     <option value="Articles">Articles</option>
                     <option value="Videos">Videos</option>
                     <option value="Research">Research</option>
                     <option value="Other">Other</option>
                   </select>
-                  <select value={"article"} disabled style={{ width: 120, background: '#0a0a14', border: '1px solid #1e1e30', borderRadius: 8, padding: '10px 12px', color: '#e8e8f0' }}>
+                  {/* <select value={"article"} disabled style={{ width: 120, background: '#0a0a14', border: '1px solid #1e1e30', borderRadius: 8, padding: '10px 12px', color: '#e8e8f0' }}>
                     <option value="article">article</option>
-                  </select>
+                  </select> */}
                 </div>
               </div>
             )}

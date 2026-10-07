@@ -5,7 +5,92 @@ import { Readability } from "@mozilla/readability";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Check if a URL is a YouTube link
+function isYouTubeUrl(url) {
+  return /youtube\.com|youtu\.be/i.test(url);
+}
+
+// Extract YouTube video ID from any YouTube URL format
+function getYouTubeVideoId(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0];
+    return u.searchParams.get("v") || null;
+  } catch {
+    return null;
+  }
+}
+
+// Dedicated YouTube extractor using oEmbed (free, no API key needed)
+async function extractYouTubeContent(url) {
+  try {
+    const videoId = getYouTubeVideoId(url);
+    const canonicalUrl = videoId
+      ? `https://www.youtube.com/watch?v=${videoId}`
+      : url;
+
+    console.log(`📺 Extracting YouTube content for: ${canonicalUrl}`);
+
+    // 1. oEmbed API — gives title + author, no key needed
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(canonicalUrl)}&format=json`;
+    const { data: oembed } = await axios.get(oembedUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        Accept: "application/json",
+      },
+      timeout: 8000,
+    });
+
+    const title = oembed.title || "";
+    const author = oembed.author_name || "";
+
+    // 2. Build a rich content string from what we have
+    const content = [
+      title,
+      author ? `Channel: ${author}` : "",
+      `YouTube video — ${canonicalUrl}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    console.log(`✅ YouTube extraction successful: "${title}" by ${author}`);
+
+    return {
+      title,
+      content,
+      url: canonicalUrl,
+      metadata: {
+        description: `${title} — by ${author}`,
+        image: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : "",
+        siteName: "YouTube",
+        author,
+      },
+    };
+  } catch (error) {
+    console.warn(`⚠️ YouTube oEmbed failed for ${url}:`, error.message);
+    const videoId = getYouTubeVideoId(url);
+    const fallbackTitle = videoId ? `YouTube Video (${videoId})` : "YouTube Video";
+    const fallbackContent = `YouTube video: ${url}. ${fallbackTitle}`;
+    return {
+      title: fallbackTitle,
+      content: fallbackContent,
+      url,
+      metadata: {
+        description: `YouTube video link (${url})`,
+        image: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : "",
+        siteName: "YouTube",
+      },
+    };
+  }
+}
+
 async function extractContent(url) {
+  // Route YouTube URLs to dedicated extractor (avoids 429 block)
+  if (isYouTubeUrl(url)) {
+    return extractYouTubeContent(url);
+  }
+
   try {
     const maxRetries = 3;
     let lastError = null;
