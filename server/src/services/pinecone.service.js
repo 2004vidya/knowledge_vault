@@ -5,8 +5,11 @@ const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
 
  export const upsertVectors = async(vectors)=>{
     try {
-         await index.upsert(vectors);
-        
+        if (!vectors || !Array.isArray(vectors) || vectors.length === 0) {
+            console.warn("⚠️ upsertVectors skipped: vectors array is empty.");
+            return { message: "No vectors to upsert" };
+        }
+        await index.upsert(vectors);
     } catch (error) {
         console.error("Upsert error:", error.message);
         return { error: error.message };

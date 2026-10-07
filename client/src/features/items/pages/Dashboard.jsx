@@ -441,7 +441,7 @@ function pollItemUntilProcessed(itemId) {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg, #6EE7B7, #93C5FD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, boxShadow: "0 0 20px #6EE7B744" }}>🧠</div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.5px", color: "#fff" }}>SavedMind</div>
+              <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.5px", color: "#fff" }}>Knowledge Vault</div>
               <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#555570", letterSpacing: "0.1em" }}>YOUR SECOND BRAIN</div>
             </div>
           </div>
@@ -605,44 +605,59 @@ function pollItemUntilProcessed(itemId) {
 
             {/* Grid view */}
             {view === "grid" && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-                {filtered.map((item, idx) => {
-                  const itemColor = item.color || (item.type === "video" ? "#FCA5A5" : item.type === "tweet" ? "#93C5FD" : item.type === "pdf" ? "#FCD34D" : item.type === "image" ? "#C4B5FD" : "#6EE7B7");
-                  const itemIcon = item.icon || typeIcon[item.type] || "📄";
-                  const itemPreview = item.preview || item.metadata?.description || item.content || "";
-                  const itemSource = item.source || item.metadata?.siteName || (item.url ? (() => { try { return new URL(item.url).hostname.replace(/^www\./, ""); } catch { return "Web"; } })() : "Web");
-                  const itemTime = item.time || new Date(item.createdAt || Date.now()).toLocaleDateString();
-                  // Show a clean title — if title looks like a raw URL, extract hostname
-                  const isRawUrl = item.title && (item.title.startsWith("http://") || item.title.startsWith("https://"));
-                  const displayTitle = isRawUrl
-                    ? (() => { try { const u = new URL(item.title); return u.hostname.replace(/^www\./,"") + (u.pathname !== "/" ? u.pathname : ""); } catch { return item.title; } })()
-                    : (item.title || "Untitled");
-                  
-                  return (
-                  <div key={item._id || item.id} className="card fade-up" onClick={() => dispatch(setSelectedItem(item))} style={{ background: "#121827", border: "1px solid #202d47", borderRadius: 14, padding: "18px", cursor: "pointer", animationDelay: `${idx * 60}ms`, position: "relative", overflow: "hidden" }}>
-                    {/* Color accent top */}
-                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${itemColor}, transparent)` }} />
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 9, background: itemColor + "18", border: "1px solid " + itemColor + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{itemIcon}</div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteItemFromCard(item); }} style={{ background: "none", border: "none", color: "#FF6B6B", cursor: "pointer", fontSize: 14, opacity: 0.6, transition: "opacity 0.2s" }} onMouseEnter={e => e.target.style.opacity = "1"} onMouseLeave={e => e.target.style.opacity = "0.6"} title="Delete item">🗑️</button>
-                        <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{itemTime}</span>
+              filtered.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "60px 20px", background: "#121827", border: "1px dashed #202d47", borderRadius: 16, marginTop: 10 }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#e8e8f0", marginBottom: 6 }}>No items found</div>
+                  <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono'", color: "#7b8db0", maxWidth: 400, margin: "0 auto" }}>
+                    {searchQuery ? `No matching saves found for "${searchQuery}". Try searching for different keywords or clear search.` : "Your Knowledge Vault is empty. Click '+ Save' to store items."}
+                  </div>
+                  {searchQuery && (
+                    <button onClick={() => dispatch(setSearchQuery(""))} style={{ marginTop: 16, padding: "8px 18px", borderRadius: 8, background: "#1f2a42", border: "1px solid #202d47", color: "#6EE7B7", fontSize: 12, fontFamily: "'JetBrains Mono'", cursor: "pointer" }}>
+                      Clear Search ✕
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+                  {filtered.map((item, idx) => {
+                    const itemColor = item.color || (item.type === "video" ? "#FCA5A5" : item.type === "tweet" ? "#93C5FD" : item.type === "pdf" ? "#FCD34D" : item.type === "image" ? "#C4B5FD" : "#6EE7B7");
+                    const itemIcon = item.icon || typeIcon[item.type] || "📄";
+                    const itemPreview = item.preview || item.metadata?.description || item.content || "";
+                    const itemSource = item.source || item.metadata?.siteName || (item.url ? (() => { try { return new URL(item.url).hostname.replace(/^www\./, ""); } catch { return "Web"; } })() : "Web");
+                    const itemTime = item.time || new Date(item.createdAt || Date.now()).toLocaleDateString();
+                    // Show a clean title — if title looks like a raw URL, extract hostname
+                    const isRawUrl = item.title && (item.title.startsWith("http://") || item.title.startsWith("https://"));
+                    const displayTitle = isRawUrl
+                      ? (() => { try { const u = new URL(item.title); return u.hostname.replace(/^www\./,"") + (u.pathname !== "/" ? u.pathname : ""); } catch { return item.title; } })()
+                      : (item.title || "Untitled");
+                    
+                    return (
+                    <div key={item._id || item.id} className="card fade-up" onClick={() => dispatch(setSelectedItem(item))} style={{ background: "#121827", border: "1px solid #202d47", borderRadius: 14, padding: "18px", cursor: "pointer", animationDelay: `${idx * 60}ms`, position: "relative", overflow: "hidden" }}>
+                      {/* Color accent top */}
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${itemColor}, transparent)` }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 9, background: itemColor + "18", border: "1px solid " + itemColor + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{itemIcon}</div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteItemFromCard(item); }} style={{ background: "none", border: "none", color: "#FF6B6B", cursor: "pointer", fontSize: 14, opacity: 0.6, transition: "opacity 0.2s" }} onMouseEnter={e => e.target.style.opacity = "1"} onMouseLeave={e => e.target.style.opacity = "0.6"} title="Delete item">🗑️</button>
+                          <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{itemTime}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#e8e8f0", marginBottom: 8, lineHeight: 1.4 }}>{displayTitle}</div>
+                      <div style={{ fontSize: 11, color: "#b8c4df", fontFamily: "'JetBrains Mono'", marginBottom: 12, lineHeight: 1.5 }}>{itemPreview ? itemPreview.slice(0, 90) + "…" : <span style={{color:"#333350",fontStyle:"italic"}}>Processing…</span>}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {(item.tags || []).map(tag => (
+                          <span key={tag} className="tag" style={{ background: "#141f34", color: "#8cd6ff", border: "1px solid #1f2f51" }}>#{tag}</span>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1e1e30", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>{itemSource}</span>
+                        <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: itemColor, background: itemColor + "15", padding: "3px 8px", borderRadius: 20 }}>{(item.related || []).length} related</span>
                       </div>
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#e8e8f0", marginBottom: 8, lineHeight: 1.4 }}>{displayTitle}</div>
-                    <div style={{ fontSize: 11, color: "#b8c4df", fontFamily: "'JetBrains Mono'", marginBottom: 12, lineHeight: 1.5 }}>{itemPreview ? itemPreview.slice(0, 90) + "…" : <span style={{color:"#333350",fontStyle:"italic"}}>Processing…</span>}</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {(item.tags || []).map(tag => (
-                        <span key={tag} className="tag" style={{ background: "#141f34", color: "#8cd6ff", border: "1px solid #1f2f51" }}>#{tag}</span>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1e1e30", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>{itemSource}</span>
-                      <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: itemColor, background: itemColor + "15", padding: "3px 8px", borderRadius: 20 }}>{(item.related || []).length} related</span>
-                    </div>
-                  </div>
-                )})}
-              </div>
+                  )})}
+                </div>
+              )
             )}
           
           </>
