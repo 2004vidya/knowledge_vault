@@ -2,6 +2,8 @@ import mongoose from "mongoose"
 import ItemModel from "../models/items.model.js"
 import itemQueue from "../queues/item.queue.js"
 import { getRelatedItems as getRelatedItemsService } from "../services/recommendations.service.js"
+import { generateEmbeddings } from "../services/embeddings.service.js"
+import { queryVectors } from "../services/pinecone.service.js"
 
 async function createItem(req, res) {
     try {
@@ -129,19 +131,82 @@ async function getRelatedItems(req, res) {
 async function searchItems(req, res) {
     try {
         const { query } = req.query;
-        const items = await ItemModel.find({
+        if (!query || typeof query !== "string" || !query.trim()) {
+            return res.json([]);
+        }
+
+        const trimmedQuery = query.trim();
+        console.log(`🔍 Semantic Search triggered for: "${trimmedQuery}" (user: ${req.user.id})`);
+
+        let semanticItemIds = [];
+
+        // 1. Semantic Vector Search via Pinecone
+        try {
+            const queryEmbedding = await generateEmbeddings(trimmedQuery);
+            if (queryEmbedding && queryEmbedding.length > 0) {
+                const matches = await queryVectors(queryEmbedding, 20);
+                if (matches && matches.length > 0) {
+                    const rawIds = matches
+                        .map(m => m.metadata?.itemId)
+                        .filter(id => id && mongoose.isValidObjectId(id));
+                    
+                    semanticItemIds = Array.from(new Set(rawIds));
+                    console.log(`🧠 Pinecone semantic matches found: ${semanticItemIds.length}`);
+                }
+            }
+        } catch (semanticErr) {
+            console.warn("⚠️ Vector semantic search error, falling back to regex search:", semanticErr.message);
+        }
+
+        // 2. Keyword Regex Search (MongoDB fallback / supplement)
+        const regexItems = await ItemModel.find({
             userid: req.user.id,
             $or: [
-                { title: { $regex: query, $options: "i" } },
-                { tags: { $regex: query, $options: "i" } }
+                { title: { $regex: trimmedQuery, $options: "i" } },
+                { tags: { $regex: trimmedQuery, $options: "i" } },
+                { content: { $regex: trimmedQuery, $options: "i" } }
             ]
-        }).sort({ createdAt: -1 })
-        res.json(items);
-    } catch (error) {
-        console.log(error)
-        return res.status(500).json({ success: false, message: "Internal server error" })
-    }
+        }).sort({ createdAt: -1 });
 
+        // 3. Fetch user's items corresponding to Pinecone semantic IDs
+        let semanticItems = [];
+        if (semanticItemIds.length > 0) {
+            const fetchedSemantic = await ItemModel.find({
+                _id: { $in: semanticItemIds },
+                userid: req.user.id
+            });
+            const itemMap = new Map(fetchedSemantic.map(item => [item._id.toString(), item]));
+            semanticItems = semanticItemIds
+                .map(id => itemMap.get(id))
+                .filter(Boolean);
+        }
+
+        // 4. Merge results: Semantic items first (by score rank), followed by Keyword matches
+        const seenIds = new Set();
+        const combined = [];
+
+        for (const item of semanticItems) {
+            const idStr = item._id.toString();
+            if (!seenIds.has(idStr)) {
+                seenIds.add(idStr);
+                combined.push(item);
+            }
+        }
+
+        for (const item of regexItems) {
+            const idStr = item._id.toString();
+            if (!seenIds.has(idStr)) {
+                seenIds.add(idStr);
+                combined.push(item);
+            }
+        }
+
+        console.log(`✅ Returning ${combined.length} total search results`);
+        return res.json(combined);
+    } catch (error) {
+        console.error("❌ Search items error:", error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
+    }
 }
 
 export default { createItem, getitems, getItemById, deleteitem, searchItems, getRelatedItems }

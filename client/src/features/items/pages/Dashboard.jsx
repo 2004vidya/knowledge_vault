@@ -299,18 +299,23 @@ export default function Dashboard() {
   }, [view]);
 
   useEffect(() => {
-    if (!searchQuery) return;
+    if (!searchQuery || !searchQuery.trim()) {
+      fetchItems().then(data => {
+        if (data?.items) dispatch(setItems(data.items));
+      }).catch(err => console.error("Error restoring items:", err));
+      return;
+    }
     const search = async () => {
       try {
-        const results = await searchForItems(searchQuery);
+        const results = await searchForItems(searchQuery.trim());
         dispatch(setItems(results || []));
       } catch (err) {
         console.error("Search failed:", err);
       }
     };
-    const debounce = setTimeout(search, 300);
+    const debounce = setTimeout(search, 350);
     return () => clearTimeout(debounce);
-  }, [searchQuery, searchForItems, dispatch]);
+  }, [searchQuery, searchForItems, fetchItems, dispatch]);
 
   // Auto-detect item type from URL
   function detectTypeFromUrl(url) {
@@ -443,10 +448,22 @@ function pollItemUntilProcessed(itemId) {
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {/* Search */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141e30", border: "1px solid #202d47", borderRadius: 10, padding: "8px 14px", width: 240 }}>
-              <span style={{ fontSize: 14, opacity: 0.4 }}>⌕</span>
-              <input value={searchQuery} onChange={e => dispatch(setSearchQuery(e.target.value))} placeholder="Search your mind..." style={{ background: "none", border: "none", color: "#e8e8f0", fontSize: 13, fontFamily: "'Syne'", width: "100%" }} />
-            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!searchQuery?.trim()) return;
+              try {
+                const results = await searchForItems(searchQuery.trim());
+                dispatch(setItems(results || []));
+              } catch (err) {
+                console.error("Manual search error:", err);
+              }
+            }} style={{ display: "flex", alignItems: "center", gap: 8, background: "#141e30", border: "1px solid #202d47", borderRadius: 10, padding: "8px 14px", width: 280 }}>
+              <span style={{ fontSize: 14, opacity: 0.6 }} title="Semantic AI Search">✨</span>
+              <input value={searchQuery} onChange={e => dispatch(setSearchQuery(e.target.value))} placeholder="Semantic search by meaning..." style={{ background: "none", border: "none", color: "#e8e8f0", fontSize: 13, fontFamily: "'Syne'", width: "100%" }} />
+              {searchQuery && (
+                <button type="button" onClick={() => dispatch(setSearchQuery(""))} style={{ background: "none", border: "none", color: "#8fa3cb", cursor: "pointer", fontSize: 12 }} title="Clear search">✕</button>
+              )}
+            </form>
             {/* View toggle */}
             <div style={{ display: "flex", background: "#141e30", border: "1px solid #202d47", borderRadius: 10, overflow: "hidden" }}>
               {[["grid", "⊞"], ["graph", "◎"]].map(([v, icon]) => (
