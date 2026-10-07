@@ -652,7 +652,14 @@ function pollItemUntilProcessed(itemId) {
                       </div>
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1e1e30", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350" }}>{itemSource}</span>
-                        <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: itemColor, background: itemColor + "15", padding: "3px 8px", borderRadius: 20 }}>{(item.related || []).length} related</span>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ textDecoration: "none", fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#6EE7B7", background: "#6EE7B715", border: "1px solid #6EE7B735", padding: "3px 8px", borderRadius: 6, display: "inline-flex", alignItems: "center", gap: 4, transition: "all 0.2s" }} onMouseEnter={e => e.currentTarget.style.background = "#6EE7B730"} onMouseLeave={e => e.currentTarget.style.background = "#6EE7B715"} title="Open original link">
+                              <span>Visit</span> ↗
+                            </a>
+                          )}
+                          <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: itemColor, background: itemColor + "15", padding: "3px 8px", borderRadius: 20 }}>{(item.related || []).length} related</span>
+                        </div>
                       </div>
                     </div>
                   )})}
@@ -690,6 +697,11 @@ function pollItemUntilProcessed(itemId) {
                   <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#8fa3cb" }}>{itemTime}</span>
                 </div>
                 <div style={{ fontSize: 13, color: "#b8c4df", lineHeight: 1.7, marginBottom: 20 }}>{itemPreview}</div>
+                {selectedItem.url && (
+                  <a href={selectedItem.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", background: "linear-gradient(135deg, #6EE7B7, #3B82F6)", color: "#080810", fontWeight: 700, fontSize: 12, fontFamily: "'JetBrains Mono'", borderRadius: 10, textDecoration: "none", marginBottom: 20, transition: "opacity 0.2s" }} onMouseEnter={e => e.currentTarget.style.opacity = "0.9"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                    <span>Open Original Resource</span> ↗
+                  </a>
+                )}
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono'", color: "#333350", marginBottom: 10, letterSpacing: "0.1em" }}>TAGS</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
